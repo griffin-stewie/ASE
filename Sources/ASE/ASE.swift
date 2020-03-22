@@ -90,19 +90,49 @@ struct ParseModel {
     }
 }
 
-public struct ASEParser {
-    let BT_GROUP_START: UInt16 = 0xc001
-    let BT_GROUP_END: UInt16 = 0xc002
-    let BT_COLOR_ENTRY: UInt16 = 0x0001
-    var colorList = NSColorList(name: "x")
+let BT_GROUP_START: UInt16 = 0xc001
+let BT_GROUP_END: UInt16 = 0xc002
+let BT_COLOR_ENTRY: UInt16 = 0x0001
 
-    public init() { }
+public struct ASE {
 
-    public func parse(url: URL) -> NSColorList? {
+    public let colorList: NSColorList
+
+    public init(from url: URL) throws {
+        guard let c = Self.parse(url: url) else {
+            throw NSError(domain: "ASE", code: 0, userInfo: nil)
+        }
+
+        self.colorList = c
+    }
+
+    public subscript(name: String) -> NSColor? {
+        get {
+            return colorList.color(withKey: name)
+        }
+        set(color) {
+            if let c = color {
+                colorList.setColor(c, forKey: name)
+            } else {
+                colorList.removeColor(withKey: name)
+            }
+        }
+    }
+
+    public func writeAsColorList(to url: URL?) throws {
+        try self.colorList.write(to: url)
+    }
+}
+
+extension ASE {
+
+    static func parse(url: URL) -> NSColorList? {
         return parse(path: url.path)
     }
 
-    public func parse(path: String) -> NSColorList? {
+    static func parse(path: String) -> NSColorList? {
+        let colorList = NSColorList(name: "x")
+
         guard let ASEFileHandle = FileHandle(forReadingAtPath:path) else  {
             return nil
         }
@@ -125,14 +155,14 @@ public struct ASEParser {
         //NSLog("Version %d.%d, blocks %d", majV, minV, nBlocks);
 
         for _ in 0..<nBlocks {
-            self.readBlock(ASEFileHandle)
+            self.readBlock(ASEFileHandle, to: colorList)
         }
 
 
         return colorList
     }
 
-    func readBlock(_ fileHandle :FileHandle) {
+    static func readBlock(_ fileHandle :FileHandle, to colorList: NSColorList) {
         let blockType: UInt16 = fileHandle.readUInt16()!
         let blockLength: UInt32 = fileHandle.readUInt32()!
 
@@ -162,7 +192,7 @@ public struct ASEParser {
 
                 var i :Int = 1;
                 var fixedName :String = name!
-                while (self.colorList.color(withKey: fixedName) != nil) {
+                while (colorList.color(withKey: fixedName) != nil) {
                     i += i
                     let s = String(format: " %ld", i)
                     fixedName = name!.appending(s)
@@ -170,7 +200,7 @@ public struct ASEParser {
 
                 name = fixedName
 
-                self.colorList.setColor(color, forKey: name!)
+                colorList.setColor(color, forKey: name!)
             }
 
         default:
@@ -178,7 +208,7 @@ public struct ASEParser {
         }
     }
 
-    func colorFromModel(_ colorModel: NSString, fileHandle: FileHandle) -> NSColor {
+    static func colorFromModel(_ colorModel: NSString, fileHandle: FileHandle) -> NSColor {
         switch colorModel {
         case "RGB ":
             let red :CGFloat = CGFloat(fileHandle.readFloat()!)
